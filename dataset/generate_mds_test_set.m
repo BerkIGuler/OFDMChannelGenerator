@@ -1,43 +1,44 @@
 % Author: Berkay Guler
-% Date: 08.06.2024
+% Date: 19.11.2025
 
-% generates a dataset of OFDM channels
-% with fixed SNR and delay spread, delay profile,
-% and varying mds
+% Generates OFDM channel pairs with given characteristics 
+% including fixed SNR, delay spread, delay profile,
+% and varying max. Doppler shift
 
-% add the path where the required functions are located
+% Add the path where the required functions are located to the MATLAB path
 [parent_dir, ~, ~] = fileparts(pwd);
 addpath(fullfile(parent_dir, 'functions'));
 
-delay_spread = 100;
-delay_profile = "TDL-A";
-N = 7;
-SNR = 10;
-max_dop_shift = 200:200:1000;
-sample_rate = 3.84e6;
-folder_name = "test/MDS_test_set";
+delay_profile = "TDL-A"; % delay profile to use in generating the channel
+N = 7; % insert pilots every N subcarriers
+SNR = 10; % SNR to use in generating the channel in dB
+delay_spread = 100; % delay spread to use in generating the channel in ns
+max_dop_shift = 200:200:1000; % array of max. Doppler shift values to use in generating the channel in Hz
+sample_rate = 3.84e6; % sample rate of the OFDM signal
+folder_name = "test/MDS_test_set"; % folder name to save the dataset
 
-if ~exist(folder_name, 'dir')
+if ~exist(folder_name, 'dir') % create the folder if it doesn't exist
    mkdir(folder_name)
 end
 
-num_samples_per_mds = 2000;
+num_samples_per_mds = 2000; % number of samples per max. Doppler shift value
 
-f = waitbar(0, 'Starting');
+f = waitbar(0, 'Starting'); % create a waitbar to show the progress
 
-total_samples = length(max_dop_shift) * num_samples_per_mds;
+total_samples = length(max_dop_shift) * num_samples_per_mds; % total number of samples to save
 sample_count_so_far = 0;
-report_every_n_samples = 10;
+report_every_n_samples = 100; % report progress every n samples
 
 for i = 1:length(max_dop_shift)
+    curr_mds = max_dop_shift(i); % set the current max. Doppler shift value
     for j = 1:num_samples_per_mds
-        curr_mds = max_dop_shift(i);
     
+        % generate the channel pair using the selected values
         [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = generate_pair( ...
             SNR, delay_spread * 1e-9, curr_mds, ...
             delay_profile, sample_rate, N);
         
-        H = cat(3, H_ideal, H_ls, H_ls_interp, tx_grid);
+        H = cat(3, H_ideal, H_ls);
         
         file_name = strcat(int2str(j), "_", ...
             "SNR-", int2str(SNR), "_", ...
@@ -46,10 +47,10 @@ for i = 1:length(max_dop_shift)
             "N-", int2str(N), "_", ...
             delay_profile);
         save_path = fullfile(folder_name, file_name);
-        save(save_path, "H", "var_hat")
+        save(save_path, "H", "var_hat") % save the channel pair and the estimated noise variance
         
         if mod(sample_count_so_far, report_every_n_samples) == 0
-            waitbar(sample_count_so_far / total_samples, ... 
+            waitbar(sample_count_so_far / total_samples, ... % update the waitbar
                 f, sprintf('Progress: %d %%', ...
                 floor((sample_count_so_far / total_samples) * 100)));
         end

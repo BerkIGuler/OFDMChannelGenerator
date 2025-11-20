@@ -4,7 +4,7 @@
 source_folder = 'test_noisy/DS_test_set';
 
 % Set the organize_by variable ('SNR', 'DS', or 'DOP')
-organize_by = 'DS'; % Change this to 'DS' or 'DOP' as needed
+organize_by = 'DS';
 
 % Get a list of all .mat files in the folder
 files = dir(fullfile(source_folder, '*.mat'));

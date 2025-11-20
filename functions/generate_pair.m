@@ -1,5 +1,5 @@
 % Author: Berkay Guler
-% Date: 07.20.2025
+% Date: 19.11.2025
 % API wrapper function for OFDM Channel Estimation
 
 function [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = generate_pair(SNR, ...
