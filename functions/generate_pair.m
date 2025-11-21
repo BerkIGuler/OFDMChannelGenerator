@@ -1,5 +1,5 @@
 % Author: Berkay Guler
-% Date: 19.11.2025
+% Date: 20.11.2025
 % API wrapper function for OFDM Channel Estimation
 
 function [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = generate_pair(SNR, ...
@@ -20,7 +20,7 @@ function [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = generate_pair(SNR, ...
     % OUTPUTS:
     % H_ideal: perfect channel estimate (by MATLAB built-in function)
     % H_ls: Least Squares channel estimations with zeros at non-pilot positions
-    % H_interp_ls: bilinearly interpolated LS channel estimate
+    % H_interp_ls: bilinearly interpolated channel from H_ls
     % tx_grid: transmitted resource grid with pilot symbols and zeros elsewhere
     % var_hat: estimated noise variance (by MATLAB built-in function)
     %
@@ -44,7 +44,7 @@ function [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = generate_pair(SNR, ...
     estimator = OFDMChannelEstimator();
     
     % Handle optional arguments for the class method
-    if nargin >= 8
+    if nargin == 8
         [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = estimator.estimate(SNR, ...
             delay_spread, max_dopp_shift, delay_profile, sample_rate, N, offset, pilot_col_indices);
     elseif nargin == 7

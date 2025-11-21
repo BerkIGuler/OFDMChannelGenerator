@@ -1,34 +1,142 @@
 % Author: Berkay Guler
-% Date: 07.20.2025
+% Date: 20.11.2025
 % OFDM Channel Estimator Class
 
 classdef OFDMChannelEstimator < handle
-    % OFDM Channel Estimation class with comprehensive error checking
-    % Provides least squares and perfect channel estimation for 5G NR systems
+    % OFDMChannelEstimator - OFDM channel estimation for 5G NR systems
+    %
+    %   This class provides comprehensive channel estimation capabilities for
+    %   OFDM-based 5G New Radio (NR) systems. It supports least squares (LS)
+    %   channel estimation with bilinear interpolation, as well as perfect
+    %   channel estimation for benchmarking purposes.
+    %
+    %   The class implements a complete OFDM transmission chain including:
+    %   - Resource grid generation with configurable pilot patterns
+    %   - OFDM modulation and demodulation
+    %   - TDL/CDL channel modeling with configurable delay spread and Doppler
+    %   - Timing synchronization
+    %   - AWGN noise addition
+    %   - Multiple channel estimation methods
+    %
+    %   Properties (Constant):
+    %       SUBCARRIERS_PER_RB - Number of subcarriers per resource block (12)
+    %       QPSK_M             - QPSK modulation order (4)
+    %       DEFAULT_NRB        - Default number of resource blocks (10)
+    %       DEFAULT_SCS        - Default subcarrier spacing in kHz (15)
+    %
+    %   Example:
+    %       estimator = OFDMChannelEstimator;
+    %       [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = ...
+    %           estimator.estimate(20, 100, 10, 'TDL-A', 30.72e6, 3, 0, [3 12]);
+    %
+    %   See also: nrCarrierConfig, nrTDLChannel, bilinear_interp
     
     properties (Constant)
-        SUBCARRIERS_PER_RB = 12;  % 5G NR constant
-        QPSK_M = 4;               % QPSK modulation order
-        DEFAULT_NRB = 10;         % Default number of resource blocks
-        DEFAULT_SCS = 15;         % Default subcarrier spacing (kHz)
+        % SUBCARRIERS_PER_RB - Number of subcarriers per resource block
+        %   Standard 5G NR constant: 12 subcarriers per resource block
+        SUBCARRIERS_PER_RB = 12;
+        
+        % QPSK_M - QPSK modulation order
+        %   Number of symbols in QPSK constellation: 4
+        QPSK_M = 4;
+        
+        % DEFAULT_NRB - Default number of resource blocks
+        %   Default value: 10 resource blocks (120 subcarriers)
+        DEFAULT_NRB = 10;
+        
+        % DEFAULT_SCS - Default subcarrier spacing in kHz
+        %   Default value: 15 kHz (standard 5G NR subcarrier spacing)
+        DEFAULT_SCS = 15;
     end
     
     properties (Access = private)
+        % carrier - 5G NR carrier configuration object
+        %   nrCarrierConfig object specifying carrier parameters
         carrier
+        
+        % resource_grid_size - Resource grid dimensions
+        %   [num_subcarriers x num_symbols] vector specifying grid size
         resource_grid_size
+        
+        % pilot_row_indices - Row indices for pilot symbols
+        %   Vector of subcarrier indices where pilots are placed
         pilot_row_indices
+        
+        % pilot_col_indices - Column indices for pilot symbols
+        %   Vector of OFDM symbol indices where pilots are placed
         pilot_col_indices
+        
+        % n_tx_ants - Number of transmit antennas
+        %   Default: 1 (SISO configuration)
         n_tx_ants = 1
+        
+        % n_rx_ants - Number of receive antennas
+        %   Default: 1 (SISO configuration)
         n_rx_ants = 1
+        
+        % delay_spread_sec - RMS delay spread in seconds
+        %   Converted from nanoseconds, used for channel model configuration
         delay_spread_sec
+        
+        % timing_offset - Estimated timing offset in samples
+        %   Used for waveform synchronization before OFDM demodulation
         timing_offset
     end
     
     methods (Access = public)
         function [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = estimate(obj, SNR, ...
                 delay_spread, max_dopp_shift, delay_profile, sample_rate, N, offset, pilot_col_indices)
-            % Main estimation function
-            % Returns: H_ideal, H_ls, H_interp_ls, tx_grid, var_hat
+            % estimate - Perform complete OFDM channel estimation pipeline
+            %
+            %   This is the main method that orchestrates the entire channel
+            %   estimation process from pilot generation to final channel estimates.
+            %
+            %   Syntax:
+            %       [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = ...
+            %           obj.estimate(SNR, delay_spread, max_dopp_shift, ...
+            %           delay_profile, sample_rate, N, offset, pilot_col_indices)
+            %
+            %   Input Arguments:
+            %       SNR              - Signal-to-noise ratio in dB (scalar)
+            %                          Typical range: -10 to 30 dB
+            %       delay_spread     - RMS delay spread in nanoseconds (scalar, > 0)
+            %                          Typical range: 10-1000 ns
+            %       max_dopp_shift   - Maximum Doppler shift in Hz (scalar, >= 0)
+            %                          Typical range: 0-1000 Hz
+            %       delay_profile    - Channel delay profile (string/char)
+            %                          Valid: 'TDL-A', 'TDL-B', 'TDL-C', 'TDL-D', 'TDL-E',
+            %                                 'CDL-A', 'CDL-B', 'CDL-C', 'CDL-D', 'CDL-E'
+            %       sample_rate      - Sample rate in Hz (scalar, > 0)
+            %                          Typical range: 1-100 MHz
+            %       N                - Pilot spacing in frequency domain (integer, > 0)
+            %                          Determines spacing between pilot subcarriers
+            %       offset           - Frequency offset for pilot placement (integer, >= 0)
+            %                          Optional, default: 0
+            %       pilot_col_indices - Column indices for pilot symbols (vector of integers)
+            %                          Optional, default: [3 12]
+            %
+            %   Output Arguments:
+            %       H_ideal      - Perfect channel estimate (complex matrix)
+            %                     Size: [num_subcarriers x num_symbols]
+            %                     Ground truth channel frequency response
+            %       H_ls         - Least squares estimate at pilot positions (complex matrix)
+            %                     Size: [num_subcarriers x num_symbols]
+            %                     Non-zero only at pilot locations
+            %       H_interp_ls  - Interpolated LS estimate over full grid (complex matrix)
+            %                     Size: [num_subcarriers x num_symbols]
+            %                     Full channel estimate using bilinear interpolation
+            %       tx_grid      - Transmit resource grid (complex matrix)
+            %                     Size: [num_subcarriers x num_symbols]
+            %                     Contains QPSK-modulated pilot symbols
+            %       var_hat      - Estimated noise variance (scalar)
+            %                     Estimated from received pilots
+            %
+            %   Example:
+            %       estimator = OFDMChannelEstimator;
+            %       [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = ...
+            %           estimator.estimate(20, 100, 10, 'TDL-A', 30.72e6, 3, 0);
+            %
+            %   See also: validateInputs, initializeGrid, performChannelEstimation
             
             % Set defaults and validate inputs
             [offset, pilot_col_indices] = obj.setDefaults(offset, pilot_col_indices, nargin);
@@ -55,7 +163,25 @@ classdef OFDMChannelEstimator < handle
     
     methods (Access = private)
         function [offset, pilot_col_indices] = setDefaults(~, offset, pilot_col_indices, nargin_count)
-            % Set default values for optional parameters
+            % setDefaults - Set default values for optional parameters
+            %
+            %   This method assigns default values to optional input parameters
+            %   if they are not provided or are empty.
+            %
+            %   Syntax:
+            %       [offset, pilot_col_indices] = setDefaults(~, offset, ...
+            %           pilot_col_indices, nargin_count)
+            %
+            %   Input Arguments:
+            %       offset            - Frequency offset (may be empty)
+            %       pilot_col_indices - Pilot column indices (may be empty)
+            %       nargin_count      - Number of input arguments provided
+            %
+            %   Output Arguments:
+            %       offset            - Frequency offset (default: 0 if not provided)
+            %       pilot_col_indices - Pilot column indices (default: [3 12] if not provided)
+            %
+            %   See also: estimate
             if nargin_count < 9 || isempty(pilot_col_indices)
                 pilot_col_indices = [3 12];
             end
@@ -65,7 +191,37 @@ classdef OFDMChannelEstimator < handle
         end
         
         function validateInputs(obj, SNR, delay_spread, max_dopp_shift, delay_profile, sample_rate, N, offset, pilot_col_indices)
-            % Comprehensive input validation with detailed error messages
+            % validateInputs - Comprehensive input validation with detailed error messages
+            %
+            %   Validates all input parameters for the estimate method, checking
+            %   data types, ranges, and logical constraints. Throws errors for
+            %   invalid inputs and warnings for unusual but valid values.
+            %
+            %   Syntax:
+            %       validateInputs(obj, SNR, delay_spread, max_dopp_shift, ...
+            %           delay_profile, sample_rate, N, offset, pilot_col_indices)
+            %
+            %   Input Arguments:
+            %       SNR              - Signal-to-noise ratio in dB
+            %       delay_spread     - RMS delay spread in nanoseconds
+            %       max_dopp_shift   - Maximum Doppler shift in Hz
+            %       delay_profile    - Channel delay profile string
+            %       sample_rate      - Sample rate in Hz
+            %       N                - Pilot spacing
+            %       offset           - Frequency offset
+            %       pilot_col_indices - Pilot column indices
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidSNR - If SNR is invalid
+            %       OFDMChannelEstimator:InvalidDelaySpread - If delay_spread is invalid
+            %       OFDMChannelEstimator:InvalidDopplerShift - If max_dopp_shift is invalid
+            %       OFDMChannelEstimator:InvalidDelayProfile - If delay_profile is invalid
+            %       OFDMChannelEstimator:InvalidSampleRate - If sample_rate is invalid
+            %       OFDMChannelEstimator:InvalidPilotSpacing - If N is invalid
+            %       OFDMChannelEstimator:InvalidOffset - If offset is invalid
+            %       OFDMChannelEstimator:InvalidPilotColIndices - If pilot_col_indices is invalid
+            %
+            %   See also: validateBasicInputs, validatePilotParameters
             try
                 obj.validateBasicInputs(SNR, delay_spread, max_dopp_shift, delay_profile, sample_rate);
                 obj.validatePilotParameters(N, offset, pilot_col_indices);
@@ -76,7 +232,36 @@ classdef OFDMChannelEstimator < handle
         end
         
         function validateBasicInputs(obj, SNR, delay_spread, max_dopp_shift, delay_profile, sample_rate)
-            % Validate basic signal and channel parameters
+            % validateBasicInputs - Validate basic signal and channel parameters
+            %
+            %   Validates the fundamental signal and channel parameters including
+            %   SNR, delay spread, Doppler shift, delay profile, and sample rate.
+            %   Issues warnings for unusual but valid values.
+            %
+            %   Syntax:
+            %       validateBasicInputs(obj, SNR, delay_spread, max_dopp_shift, ...
+            %           delay_profile, sample_rate)
+            %
+            %   Input Arguments:
+            %       SNR            - Signal-to-noise ratio in dB (scalar)
+            %       delay_spread   - RMS delay spread in nanoseconds (scalar, > 0)
+            %                       Converted to seconds and stored in obj.delay_spread_sec
+            %       max_dopp_shift - Maximum Doppler shift in Hz (scalar, >= 0)
+            %       delay_profile  - Channel delay profile (string/char)
+            %                       Valid profiles: TDL-A/B/C/D/E, CDL-A/B/C/D/E
+            %       sample_rate    - Sample rate in Hz (scalar, > 0)
+            %
+            %   Side Effects:
+            %       Sets obj.delay_spread_sec to delay_spread converted to seconds
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidSNR - If SNR is not a numeric scalar
+            %       OFDMChannelEstimator:InvalidDelaySpread - If delay_spread is invalid
+            %       OFDMChannelEstimator:InvalidDopplerShift - If max_dopp_shift is invalid
+            %       OFDMChannelEstimator:InvalidDelayProfile - If delay_profile is invalid
+            %       OFDMChannelEstimator:InvalidSampleRate - If sample_rate is invalid
+            %
+            %   See also: validateInputs
             
             % Validate SNR
             if ~isnumeric(SNR) || ~isscalar(SNR)
@@ -126,7 +311,28 @@ classdef OFDMChannelEstimator < handle
         end
         
         function validatePilotParameters(~, N, offset, pilot_col_indices)
-            % Validate pilot-related parameters
+            % validatePilotParameters - Validate pilot-related parameters
+            %
+            %   Validates parameters related to pilot symbol placement including
+            %   pilot spacing, frequency offset, and pilot column indices.
+            %
+            %   Syntax:
+            %       validatePilotParameters(~, N, offset, pilot_col_indices)
+            %
+            %   Input Arguments:
+            %       N                - Pilot spacing in frequency domain (integer, > 0)
+            %                         Determines spacing between pilot subcarriers
+            %       offset           - Frequency offset for pilot placement (integer, >= 0)
+            %                         Starting subcarrier index for pilot placement
+            %       pilot_col_indices - Column indices for pilot symbols (vector of integers)
+            %                         Must be positive integers within grid bounds
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidPilotSpacing - If N is not a positive integer
+            %       OFDMChannelEstimator:InvalidOffset - If offset is not a non-negative integer
+            %       OFDMChannelEstimator:InvalidPilotColIndices - If pilot_col_indices is invalid
+            %
+            %   See also: validateInputs, validateGridConstraints
             
             % Validate N (pilot spacing)
             if ~isnumeric(N) || ~isscalar(N) || N <= 0 || N ~= round(N)
@@ -145,7 +351,32 @@ classdef OFDMChannelEstimator < handle
         end
         
         function initializeGrid(obj, N, offset, pilot_col_indices)
-            % Initialize resource grid and pilot positions
+            % initializeGrid - Initialize resource grid and pilot positions
+            %
+            %   Creates the 5G NR carrier configuration and resource grid, then
+            %   calculates and validates pilot symbol positions based on the
+            %   provided spacing and offset parameters.
+            %
+            %   Syntax:
+            %       initializeGrid(obj, N, offset, pilot_col_indices)
+            %
+            %   Input Arguments:
+            %       N                - Pilot spacing in frequency domain
+            %       offset           - Frequency offset for pilot placement
+            %       pilot_col_indices - Column indices for pilot symbols
+            %
+            %   Side Effects:
+            %       Sets obj.carrier - nrCarrierConfig object
+            %       Sets obj.resource_grid_size - [num_subcarriers x num_symbols]
+            %       Sets obj.pilot_row_indices - Row indices for pilot symbols
+            %       Sets obj.pilot_col_indices - Column indices for pilot symbols
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidPilotSpacing - If N exceeds grid size
+            %       OFDMChannelEstimator:InvalidOffset - If offset is too large
+            %       OFDMChannelEstimator:InvalidPilotPosition - If pilot columns exceed grid
+            %
+            %   See also: validateGridConstraints, checkPilotSufficiency
             try
                 % Create carrier configuration
                 obj.carrier = nrCarrierConfig('NSizeGrid', obj.DEFAULT_NRB, 'SubcarrierSpacing', obj.DEFAULT_SCS);
@@ -172,7 +403,29 @@ classdef OFDMChannelEstimator < handle
         end
         
         function validateGridConstraints(obj, N, offset, pilot_col_indices)
-            % Validate pilot parameters against grid constraints
+            % validateGridConstraints - Validate pilot parameters against grid constraints
+            %
+            %   Ensures that pilot placement parameters are compatible with the
+            %   resource grid dimensions. Checks pilot spacing, offset, column
+            %   indices, and pilot symmetry.
+            %
+            %   Syntax:
+            %       validateGridConstraints(obj, N, offset, pilot_col_indices)
+            %
+            %   Input Arguments:
+            %       N                - Pilot spacing in frequency domain
+            %       offset           - Frequency offset for pilot placement
+            %       pilot_col_indices - Column indices for pilot symbols
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidPilotSpacing - If N > num_subcarriers
+            %       OFDMChannelEstimator:InvalidOffset - If offset >= num_subcarriers
+            %       OFDMChannelEstimator:InvalidPilotPosition - If pilot columns exceed grid
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:AsymmetricPilots - If pilots are not symmetrically placed
+            %
+            %   See also: initializeGrid
             
             % Check pilot spacing
             if N > obj.resource_grid_size(1)
@@ -205,7 +458,20 @@ classdef OFDMChannelEstimator < handle
         end
         
         function checkPilotSufficiency(obj)
-            % Check if we have sufficient pilots for interpolation
+            % checkPilotSufficiency - Check if we have sufficient pilots for interpolation
+            %
+            %   Verifies that there are enough pilot symbols in both frequency
+            %   and time dimensions to perform reliable bilinear interpolation.
+            %   Issues a warning if the number of pilots is insufficient.
+            %
+            %   Syntax:
+            %       checkPilotSufficiency(obj)
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:InsufficientPilots - If fewer than 2 pilots
+            %                                                 in either dimension
+            %
+            %   See also: initializeGrid, interpolateLSEstimate
             if length(obj.pilot_row_indices) < 2 || length(obj.pilot_col_indices) < 2
                 warning('OFDMChannelEstimator:InsufficientPilots', ...
                     'Very few pilot symbols (%d x %d) may result in poor interpolation', ...
@@ -214,7 +480,29 @@ classdef OFDMChannelEstimator < handle
         end
         
         function tx_grid = generatePilotGrid(obj)
-            % Generate pilot symbols and populate transmission grid
+            % generatePilotGrid - Generate pilot symbols and populate transmission grid
+            %
+            %   Creates a resource grid and populates it with QPSK-modulated pilot
+            %   symbols at the specified pilot positions. Pilot symbols are
+            %   randomly generated and modulated using QPSK.
+            %
+            %   Syntax:
+            %       tx_grid = generatePilotGrid(obj)
+            %
+            %   Output Arguments:
+            %       tx_grid - Transmit resource grid (complex matrix)
+            %                 Size: [num_subcarriers x num_symbols]
+            %                 Contains QPSK-modulated pilot symbols at pilot positions,
+            %                 zeros elsewhere
+            %
+            %   Side Effects:
+            %       Verifies pilot power is approximately unit power
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:UnexpectedPilotPower - If pilot power deviates
+            %                                                   significantly from 1
+            %
+            %   See also: verifyPilotPower, estimate
             try
                 tx_grid = nrResourceGrid(obj.carrier, obj.n_tx_ants);
                 
@@ -237,7 +525,23 @@ classdef OFDMChannelEstimator < handle
         end
         
         function verifyPilotPower(obj, tx_grid)
-            % Verify that pilot symbols have expected unit power
+            % verifyPilotPower - Verify that pilot symbols have expected unit power
+            %
+            %   Checks that the average power of pilot symbols is approximately
+            %   unity, as expected for QPSK modulation. Issues a warning if
+            %   significant deviation is detected.
+            %
+            %   Syntax:
+            %       verifyPilotPower(obj, tx_grid)
+            %
+            %   Input Arguments:
+            %       tx_grid - Transmit resource grid containing pilot symbols
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:UnexpectedPilotPower - If pilot power deviates
+            %                                                   from 1 by more than 0.1
+            %
+            %   See also: generatePilotGrid
             pilot_power = mean(abs(tx_grid(obj.pilot_row_indices, obj.pilot_col_indices)).^2, 'all');
             if abs(pilot_power - 1) > 0.1
                 warning('OFDMChannelEstimator:UnexpectedPilotPower', ...
@@ -246,7 +550,34 @@ classdef OFDMChannelEstimator < handle
         end
         
         function [rx_waveform, path_gains, channel] = simulateChannel(obj, tx_grid, sample_rate, delay_profile, max_dopp_shift)
-            % OFDM modulation and channel simulation
+            % simulateChannel - OFDM modulation and channel simulation
+            %
+            %   Performs OFDM modulation of the transmit grid, creates a TDL/CDL
+            %   channel model, and simulates transmission through the channel to
+            %   obtain the received waveform and path gains.
+            %
+            %   Syntax:
+            %       [rx_waveform, path_gains, channel] = simulateChannel(obj, ...
+            %           tx_grid, sample_rate, delay_profile, max_dopp_shift)
+            %
+            %   Input Arguments:
+            %       tx_grid        - Transmit resource grid (complex matrix)
+            %       sample_rate    - Sample rate in Hz
+            %       delay_profile  - Channel delay profile string
+            %       max_dopp_shift - Maximum Doppler shift in Hz
+            %
+            %   Output Arguments:
+            %       rx_waveform - Received waveform after channel (complex vector)
+            %                     Size: [num_samples x num_rx_ants]
+            %       path_gains  - Channel path gains (complex array)
+            %                     Used for perfect channel estimation
+            %       channel     - Configured nrTDLChannel object
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidWaveform - If tx_waveform contains NaN/Inf
+            %       OFDMChannelEstimator:InvalidRxWaveform - If rx_waveform contains NaN/Inf
+            %
+            %   See also: createChannelModel, transmitThroughChannel, estimate
             try
                 % OFDM modulation
                 ofdm_info = nrOFDMInfo(obj.carrier);
@@ -271,7 +602,26 @@ classdef OFDMChannelEstimator < handle
         end
         
         function channel = createChannelModel(obj, sample_rate, delay_profile, max_dopp_shift)
-            % Create and configure TDL channel model
+            % createChannelModel - Create and configure TDL channel model
+            %
+            %   Creates an nrTDLChannel object and configures it with the specified
+            %   parameters including sample rate, delay profile, delay spread, and
+            %   maximum Doppler shift.
+            %
+            %   Syntax:
+            %       channel = createChannelModel(obj, sample_rate, delay_profile, max_dopp_shift)
+            %
+            %   Input Arguments:
+            %       sample_rate    - Sample rate in Hz
+            %       delay_profile  - Channel delay profile string ('TDL-A', 'TDL-B', etc.)
+            %       max_dopp_shift - Maximum Doppler shift in Hz
+            %
+            %   Output Arguments:
+            %       channel - Configured nrTDLChannel object
+            %                 Properties set: NumReceiveAntennas, NumTransmitAntennas,
+            %                 SampleRate, DelayProfile, DelaySpread, MaximumDopplerShift
+            %
+            %   See also: simulateChannel, nrTDLChannel
             channel = nrTDLChannel;
             channel.NumReceiveAntennas = obj.n_rx_ants;
             channel.NumTransmitAntennas = obj.n_tx_ants;
@@ -282,7 +632,36 @@ classdef OFDMChannelEstimator < handle
         end
         
         function [rx_waveform, path_gains] = transmitThroughChannel(obj, tx_waveform, channel)
-            % Transmit waveform through channel with proper padding
+            % transmitThroughChannel - Transmit waveform through channel with proper padding
+            %
+            %   Applies the channel model to the transmit waveform, adding appropriate
+            %   padding to account for channel delay. Returns the received waveform
+            %   and path gains for perfect channel estimation.
+            %
+            %   Syntax:
+            %       [rx_waveform, path_gains] = transmitThroughChannel(obj, ...
+            %           tx_waveform, channel)
+            %
+            %   Input Arguments:
+            %       tx_waveform - Transmit waveform (complex vector)
+            %                    Size: [num_samples x num_tx_ants]
+            %       channel     - Configured nrTDLChannel object
+            %
+            %   Output Arguments:
+            %       rx_waveform - Received waveform after channel (complex vector)
+            %                     Size: [num_samples x num_rx_ants]
+            %                     Includes channel effects (fading, delay, etc.)
+            %       path_gains  - Channel path gains (complex array)
+            %                     Used for perfect channel estimation
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:LargeChannelDelay - If channel delay is
+            %                                                comparable to waveform length
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidRxWaveform - If rx_waveform contains NaN/Inf
+            %
+            %   See also: simulateChannel, createChannelModel
             ch_info = info(channel);
             max_ch_delay = ch_info.MaximumChannelDelay;
             
@@ -302,7 +681,31 @@ classdef OFDMChannelEstimator < handle
         end
         
         function rx_grid = synchronizeAndDemodulate(obj, rx_waveform, tx_grid)
-            % Timing synchronization and OFDM demodulation
+            % synchronizeAndDemodulate - Timing synchronization and OFDM demodulation
+            %
+            %   Performs timing synchronization on the received waveform using
+            %   correlation-based timing estimation, then applies the timing offset
+            %   and performs OFDM demodulation to obtain the received resource grid.
+            %
+            %   Syntax:
+            %       rx_grid = synchronizeAndDemodulate(obj, rx_waveform, tx_grid)
+            %
+            %   Input Arguments:
+            %       rx_waveform - Received waveform after channel (complex vector)
+            %       tx_grid     - Transmit resource grid (for timing estimation)
+            %
+            %   Output Arguments:
+            %       rx_grid - Demodulated received resource grid (complex matrix)
+            %                 Size: [num_subcarriers x num_symbols]
+            %
+            %   Side Effects:
+            %       Sets obj.timing_offset to the estimated timing offset in samples
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidOffset - If timing offset exceeds waveform length
+            %       OFDMChannelEstimator:InvalidRxGrid - If rx_grid contains NaN/Inf
+            %
+            %   See also: applySynchronization, validateDemodulation, estimate
             try
                 % Estimate and apply timing offset
                 obj.timing_offset = nrTimingEstimate(obj.carrier, rx_waveform, tx_grid);
@@ -321,7 +724,32 @@ classdef OFDMChannelEstimator < handle
         end
         
         function rx_waveform = applySynchronization(obj, rx_waveform)
-            % Apply timing synchronization to received waveform
+            % applySynchronization - Apply timing synchronization to received waveform
+            %
+            %   Applies the estimated timing offset to the received waveform by
+            %   either removing samples (positive offset) or adding zeros (negative
+            %   offset) to align the waveform for proper OFDM demodulation.
+            %
+            %   Syntax:
+            %       rx_waveform = applySynchronization(obj, rx_waveform)
+            %
+            %   Input Arguments:
+            %       rx_waveform - Received waveform before synchronization (complex vector)
+            %
+            %   Output Arguments:
+            %       rx_waveform - Synchronized received waveform (complex vector)
+            %                     Timing offset has been applied
+            %
+            %   Side Effects:
+            %       Uses obj.timing_offset (must be set before calling)
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:LargeTimingOffset - If |timing_offset| > 1000 samples
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidOffset - If timing offset exceeds waveform length
+            %
+            %   See also: synchronizeAndDemodulate
             if abs(obj.timing_offset) > 1000  % Reasonable threshold
                 warning('OFDMChannelEstimator:LargeTimingOffset', ...
                     'Large timing offset (%d samples) detected', obj.timing_offset);
@@ -338,7 +766,25 @@ classdef OFDMChannelEstimator < handle
         end
         
         function validateDemodulation(obj, rx_grid, tx_grid)
-            % Validate demodulation results
+            % validateDemodulation - Validate demodulation results
+            %
+            %   Checks that the demodulated received grid is valid (no NaN or Inf
+            %   values) and has the expected dimensions matching the transmit grid.
+            %
+            %   Syntax:
+            %       validateDemodulation(obj, rx_grid, tx_grid)
+            %
+            %   Input Arguments:
+            %       rx_grid - Demodulated received resource grid (complex matrix)
+            %       tx_grid - Transmit resource grid for size comparison (complex matrix)
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidRxGrid - If rx_grid contains NaN/Inf values
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:GridSizeMismatch - If rx_grid and tx_grid sizes differ
+            %
+            %   See also: synchronizeAndDemodulate
             if any(~isfinite(rx_grid), 'all')
                 error('OFDMChannelEstimator:InvalidRxGrid', 'Demodulated grid contains NaN or Inf values');
             end
@@ -351,7 +797,36 @@ classdef OFDMChannelEstimator < handle
         end
         
         function [H_ideal, H_ls, H_interp_ls, var_hat] = performChannelEstimation(obj, rx_grid, tx_grid, SNR, path_gains, channel)
-            % Add noise and perform channel estimation
+            % performChannelEstimation - Add noise and perform channel estimation
+            %
+            %   Adds AWGN noise to the received grid, estimates noise variance,
+            %   and computes three types of channel estimates: perfect (ground truth),
+            %   least squares at pilot positions, and interpolated LS over the full grid.
+            %
+            %   Syntax:
+            %       [H_ideal, H_ls, H_interp_ls, var_hat] = performChannelEstimation(...
+            %           obj, rx_grid, tx_grid, SNR, path_gains, channel)
+            %
+            %   Input Arguments:
+            %       rx_grid     - Demodulated received resource grid (complex matrix)
+            %       tx_grid     - Transmit resource grid (complex matrix)
+            %       SNR         - Signal-to-noise ratio in dB
+            %       path_gains  - Channel path gains from channel simulation (complex array)
+            %       channel     - Channel model object (for perfect estimation)
+            %
+            %   Output Arguments:
+            %       H_ideal     - Perfect channel estimate (complex matrix)
+            %                    Size: [num_subcarriers x num_symbols]
+            %                    Ground truth channel frequency response
+            %       H_ls        - Least squares estimate at pilot positions (complex matrix)
+            %                    Size: [num_subcarriers x num_symbols]
+            %                    Non-zero only at pilot locations
+            %       H_interp_ls - Interpolated LS estimate over full grid (complex matrix)
+            %                    Size: [num_subcarriers x num_symbols]
+            %                    Full channel estimate using bilinear interpolation
+            %       var_hat     - Estimated noise variance (scalar)
+            %
+            %   See also: computePerfectChannelEstimate, computeLSEstimate, interpolateLSEstimate
             try
                 % Add AWGN noise
                 rx_grid = awgn(rx_grid, SNR, 'measured');
@@ -379,7 +854,26 @@ classdef OFDMChannelEstimator < handle
         end
         
         function var_hat = validateNoiseVariance(~, var_hat, SNR)
-            % Validate and potentially correct noise variance estimate
+            % validateNoiseVariance - Validate and potentially correct noise variance estimate
+            %
+            %   Checks that the estimated noise variance is valid (positive and finite).
+            %   If invalid, computes a fallback estimate based on the SNR value.
+            %
+            %   Syntax:
+            %       var_hat = validateNoiseVariance(~, var_hat, SNR)
+            %
+            %   Input Arguments:
+            %       var_hat - Estimated noise variance (may be invalid)
+            %       SNR     - Signal-to-noise ratio in dB (for fallback calculation)
+            %
+            %   Output Arguments:
+            %       var_hat - Validated noise variance (scalar, > 0, finite)
+            %                 If input was invalid, returns 10^(-SNR/10)
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:InvalidNoiseVariance - If var_hat is invalid
+            %
+            %   See also: performChannelEstimation
             if var_hat <= 0 || ~isfinite(var_hat)
                 warning('OFDMChannelEstimator:InvalidNoiseVariance', ...
                     'Invalid noise variance estimate: %.6f', var_hat);
@@ -388,7 +882,30 @@ classdef OFDMChannelEstimator < handle
         end
         
         function H_ideal = computePerfectChannelEstimate(obj, path_gains, channel)
-            % Compute perfect channel estimate using MATLAB functions
+            % computePerfectChannelEstimate - Compute perfect channel estimate using MATLAB functions
+            %
+            %   Computes the ground truth channel frequency response using the
+            %   channel path gains and path filters. This serves as a reference
+            %   for evaluating the quality of estimated channel responses.
+            %
+            %   Syntax:
+            %       H_ideal = computePerfectChannelEstimate(obj, path_gains, channel)
+            %
+            %   Input Arguments:
+            %       path_gains - Channel path gains from channel simulation (complex array)
+            %                    Obtained from transmitThroughChannel
+            %       channel    - Channel model object (nrTDLChannel)
+            %                    Used to extract path filters
+            %
+            %   Output Arguments:
+            %       H_ideal - Perfect channel estimate (complex matrix)
+            %                 Size: [num_subcarriers x num_symbols]
+            %                 Ground truth channel frequency response
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidIdealChannel - If H_ideal contains NaN/Inf
+            %
+            %   See also: performChannelEstimation, nrPerfectChannelEstimate
             pathFilters = getPathFilters(channel);
             H_ideal = nrPerfectChannelEstimate(obj.carrier, path_gains, pathFilters, obj.timing_offset);
             
@@ -398,7 +915,33 @@ classdef OFDMChannelEstimator < handle
         end
         
         function H_ls = computeLSEstimate(obj, rx_grid, tx_grid)
-            % Compute least squares channel estimate at pilot positions
+            % computeLSEstimate - Compute least squares channel estimate at pilot positions
+            %
+            %   Performs least squares channel estimation at pilot symbol positions
+            %   by dividing received pilot symbols by transmitted pilot symbols.
+            %   The estimate is zero everywhere except at pilot locations.
+            %
+            %   Syntax:
+            %       H_ls = computeLSEstimate(obj, rx_grid, tx_grid)
+            %
+            %   Input Arguments:
+            %       rx_grid - Demodulated received resource grid (complex matrix)
+            %                 Contains received pilot symbols
+            %       tx_grid - Transmit resource grid (complex matrix)
+            %                 Contains transmitted pilot symbols
+            %
+            %   Output Arguments:
+            %       H_ls - Least squares channel estimate (complex matrix)
+            %              Size: [num_subcarriers x num_symbols]
+            %              Non-zero only at pilot positions: H_ls = rx_pilots ./ tx_pilots
+            %
+            %   Side Effects:
+            %       Handles very small pilot symbols to avoid numerical issues
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidLSEstimate - If H_ls contains NaN/Inf
+            %
+            %   See also: handleSmallPilots, interpolateLSEstimate, performChannelEstimation
             H_ls = zeros(obj.resource_grid_size);
             
             % Extract pilot symbols
@@ -417,7 +960,27 @@ classdef OFDMChannelEstimator < handle
         end
         
         function tx_pilots = handleSmallPilots(~, tx_pilots)
-            % Handle very small pilot symbols to avoid numerical issues
+            % handleSmallPilots - Handle very small pilot symbols to avoid numerical issues
+            %
+            %   Identifies pilot symbols with very small magnitude and replaces them
+            %   with a small threshold value to prevent division by zero or near-zero
+            %   in least squares channel estimation.
+            %
+            %   Syntax:
+            %       tx_pilots = handleSmallPilots(~, tx_pilots)
+            %
+            %   Input Arguments:
+            %       tx_pilots - Transmitted pilot symbols (complex matrix)
+            %
+            %   Output Arguments:
+            %       tx_pilots - Processed pilot symbols (complex matrix)
+            %                   Symbols with |tx_pilots| < 1e-6 are replaced with
+            %                   1e-6 * sign(tx_pilots) to maintain phase information
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:SmallPilotSymbols - If any pilot symbols are very small
+            %
+            %   See also: computeLSEstimate
             small_pilots = abs(tx_pilots) < 1e-6;
             if any(small_pilots, 'all')
                 warning('OFDMChannelEstimator:SmallPilotSymbols', ...
@@ -428,7 +991,29 @@ classdef OFDMChannelEstimator < handle
         end
         
         function H_interp_ls = interpolateLSEstimate(~, H_ls)
-            % Interpolate LS estimates to full grid
+            % interpolateLSEstimate - Interpolate LS estimates to full grid
+            %
+            %   Interpolates the least squares channel estimates from pilot positions
+            %   to all subcarriers and symbols in the resource grid using bilinear
+            %   interpolation.
+            %
+            %   Syntax:
+            %       H_interp_ls = interpolateLSEstimate(~, H_ls)
+            %
+            %   Input Arguments:
+            %       H_ls - Least squares channel estimate at pilot positions (complex matrix)
+            %              Size: [num_subcarriers x num_symbols]
+            %              Non-zero only at pilot locations
+            %
+            %   Output Arguments:
+            %       H_interp_ls - Interpolated LS channel estimate (complex matrix)
+            %                    Size: [num_subcarriers x num_symbols]
+            %                    Full grid estimate obtained via bilinear interpolation
+            %
+            %   Throws:
+            %       OFDMChannelEstimator:InvalidInterpolation - If H_interp_ls contains NaN/Inf
+            %
+            %   See also: bilinear_interp, computeLSEstimate, performChannelEstimation
             H_interp_ls = bilinear_interp(H_ls);
             
             if any(~isfinite(H_interp_ls), 'all')
@@ -437,7 +1022,28 @@ classdef OFDMChannelEstimator < handle
         end
         
         function assessEstimationQuality(~, H_ideal, H_interp_ls)
-            % Assess and report estimation quality
+            % assessEstimationQuality - Assess and report estimation quality
+            %
+            %   Computes and reports the mean squared error (MSE) between the perfect
+            %   channel estimate and the interpolated LS estimate to assess the
+            %   quality of channel estimation.
+            %
+            %   Syntax:
+            %       assessEstimationQuality(~, H_ideal, H_interp_ls)
+            %
+            %   Input Arguments:
+            %       H_ideal     - Perfect channel estimate (complex matrix)
+            %                    Ground truth channel frequency response
+            %       H_interp_ls - Interpolated LS channel estimate (complex matrix)
+            %                    Estimated channel frequency response
+            %
+            %   Side Effects:
+            %       Prints MSE value to console
+            %
+            %   Warnings:
+            %       OFDMChannelEstimator:PoorEstimation - If MSE > 1
+            %
+            %   See also: performChannelEstimation
             mse_ls = mean(abs(H_ideal - H_interp_ls).^2, 'all');
             fprintf('LS Channel estimation MSE: %.6f\n', mse_ls);
             
