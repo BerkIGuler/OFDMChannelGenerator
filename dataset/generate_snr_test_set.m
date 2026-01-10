@@ -9,13 +9,13 @@
 [parent_dir, ~, ~] = fileparts(pwd);
 addpath(fullfile(parent_dir, 'functions'));
 
-delay_profile = "TDL-B"; % delay profile to use in generating the channel
+delay_profile = "TDL-A"; % delay profile to use in generating the channel
 N = 3; % insert pilots every N subcarriers
 delay_spread = 200; % delay spread to use in generating the channel in ns
 max_doppler_shift = 500; % max. Doppler shift to use in generating the channel in Hz
 SNR = 0: 5: 25; % array of SNR values to use in generating the channel in dB
 sample_rate = 3.84e6; % sample rate of the OFDM signal
-folder_name = "test_tdlb/SNR_test_set"; % folder name to save the dataset
+folder_name = "test/SNR_test_set"; % folder name to save the dataset
 
 if ~exist(folder_name, 'dir') % create the folder if it doesn't exist
    mkdir(folder_name)

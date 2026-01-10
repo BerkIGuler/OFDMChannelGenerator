@@ -1,7 +1,7 @@
 %% This scripts groups a dataset under subfolders.
 
 % Specify the folder containing the files
-source_folder = 'test_noisy/DS_test_set';
+source_folder = 'test/DS_test_set';
 
 % Set the organize_by variable ('SNR', 'DS', or 'DOP')
 organize_by = 'DS';

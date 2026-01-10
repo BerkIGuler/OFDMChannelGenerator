@@ -10,7 +10,7 @@
 addpath(fullfile(parent_dir, 'functions'));
 
 delay_profile = "TDL-A"; % delay profile to use in generating the channel
-N = 7; % insert pilots every N subcarriers
+N = 3; % insert pilots every N subcarriers
 SNR = 10; % SNR to use in generating the channel in dB
 delay_spread = 100; % delay spread to use in generating the channel in ns
 max_dop_shift = 200:200:1000; % array of max. Doppler shift values to use in generating the channel in Hz

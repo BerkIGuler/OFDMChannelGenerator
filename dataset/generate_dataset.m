@@ -8,8 +8,8 @@
 [parent_dir, ~, ~] = fileparts(pwd);
 addpath(fullfile(parent_dir, 'functions'));
 
-N = 4; % insert pilots every N subcarriers
-folder_name = "val_large_N4"; % folder name to save the dataset
+N = 3; % insert pilots every N subcarriers
+folder_name = "val"; % folder name to save the dataset
 num_channels = 10000; % number of channel pairs to generate
 
 sample_rate = 3.84e6; % sample rate of the OFDM signal
