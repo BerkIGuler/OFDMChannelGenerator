@@ -1,10 +1,10 @@
 %% This scripts groups a dataset under subfolders.
 
 % Specify the folder containing the files
-source_folder = 'test_noisy/DS_test_set';
+source_folder = 'test/DS_test_set';
 
 % Set the organize_by variable ('SNR', 'DS', or 'DOP')
-organize_by = 'DS'; % Change this to 'DS' or 'DOP' as needed
+organize_by = 'DS';
 
 % Get a list of all .mat files in the folder
 files = dir(fullfile(source_folder, '*.mat'));

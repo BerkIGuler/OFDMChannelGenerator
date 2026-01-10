@@ -1,3 +1,0 @@
-% generate_noisy_snr_test_set
-% generate_noisy_ds_test_set
-generate_noisy_mds_test_set
