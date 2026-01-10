@@ -163,7 +163,6 @@ classdef OFDMChannelEstimator < handle
             % Add noise and perform channel estimation
             [H_ideal, H_ls, H_interp_ls, var_hat] = obj.performChannelEstimation(rx_grid, tx_grid, SNR, path_gains, channel);
             
-            fprintf('Channel estimation completed successfully!\n');
         end
     end
     
