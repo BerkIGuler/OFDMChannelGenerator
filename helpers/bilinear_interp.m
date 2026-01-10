@@ -1,6 +1,6 @@
 %% Linear interpolation to estimate missing elements in a matrix
 % Author: Berkay Guler
-% Date: 19.11.2025
+% Date: 01.10.2026
 
 function H_hat = bilinear_interp(H_ls)
     % H_ls: input matrix with missing entries set to 0

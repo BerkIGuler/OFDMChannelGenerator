@@ -1,13 +1,11 @@
 % Author: Berkay Guler
-% Date: 19.11.2025
+% Date: 01.10.2026
 
 % Generates OFDM channel pairs with given characteristics 
 % including SNR, delay spread, max. Doppler shift, and delay profile
 
-% Add the pathclc
-%  where the required functions are located to the MATLAB path
-[parent_dir, ~, ~] = fileparts(pwd);
-addpath(fullfile(parent_dir, 'functions'));
+% Add helpers to MATLAB path
+addpath('helpers');
 
 N = 3; % insert pilots every N subcarriers
 val_folder_name = "val";
@@ -23,7 +21,7 @@ delay_spread = 25:25:300; % array of delay spread values to use in generating th
 max_dop_shift = 50:50:1000; % max. Doppler shift values to use in generating the channel in Hz
 delay_profile = "TDL-A"; % delay profile to use in generating the channel
 
-% Create the folder if it doesn't exist
+% Create the folders if they don't exist
 if ~exist(val_folder_name, 'dir')
    mkdir(val_folder_name)
 end
@@ -34,8 +32,8 @@ end
 
 report_every_n = val_num_channels / 10; % report progress every n channels
 
-% Create the OFDM channel estimator instance
-estimator = OFDMChannelEstimator();
+% Create the OFDM channel estimator instance with configuration
+estimator = OFDMChannelEstimator(sample_rate, delay_profile, N);
 
 f = waitbar(0, 'Starting'); % create a waitbar to show the progress
 
@@ -51,8 +49,7 @@ for i = 1:total_num_channels
 
     % generate the channel pair using the estimator
     [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = estimator.estimate(curr_SNR, ...
-        curr_delay_spread, curr_doppler_shift, ...
-        delay_profile, sample_rate, N);
+        curr_delay_spread, curr_doppler_shift);
     
     H = cat(3, H_ideal, H_ls);
     

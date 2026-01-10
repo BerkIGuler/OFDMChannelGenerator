@@ -1,2 +1,5 @@
 *.mat
 *.DS_Store
+test/
+train/
+val/
