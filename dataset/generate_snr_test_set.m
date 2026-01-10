@@ -23,6 +23,9 @@ end
 
 num_samples_per_SNR = 2000; % number of samples per SNR value
 
+% Create the OFDM channel estimator instance
+estimator = OFDMChannelEstimator();
+
 f = waitbar(0, 'Starting'); % create a waitbar to show the progress
 
 total_samples = length(SNR) * num_samples_per_SNR; % total number of samples to save
@@ -33,9 +36,9 @@ for i = 1:length(SNR)
     curr_SNR = SNR(i); % set the current SNR value
     for j = 1:num_samples_per_SNR
     
-        % generate the channel pair using the selected values
-        [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = generate_pair( ...
-            curr_SNR, delay_spread * 1e-9, max_doppler_shift, ...
+        % generate the channel pair using the estimator
+        [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = estimator.estimate( ...
+            curr_SNR, delay_spread, max_doppler_shift, ...
             delay_profile, sample_rate, N);
         
         H = cat(3, H_ideal, H_ls);

@@ -138,7 +138,13 @@ classdef OFDMChannelEstimator < handle
             %
             %   See also: validateInputs, initializeGrid, performChannelEstimation
             
-            % Set defaults and validate inputs
+            % Set defaults for optional parameters
+            if nargin < 9
+                pilot_col_indices = [];
+            end
+            if nargin < 8
+                offset = [];
+            end
             [offset, pilot_col_indices] = obj.setDefaults(offset, pilot_col_indices, nargin);
             obj.validateInputs(SNR, delay_spread, max_dopp_shift, delay_profile, sample_rate, N, offset, pilot_col_indices);
             

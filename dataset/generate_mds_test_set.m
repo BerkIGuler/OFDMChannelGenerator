@@ -23,6 +23,9 @@ end
 
 num_samples_per_mds = 2000; % number of samples per max. Doppler shift value
 
+% Create the OFDM channel estimator instance
+estimator = OFDMChannelEstimator();
+
 f = waitbar(0, 'Starting'); % create a waitbar to show the progress
 
 total_samples = length(max_dop_shift) * num_samples_per_mds; % total number of samples to save
@@ -33,9 +36,9 @@ for i = 1:length(max_dop_shift)
     curr_mds = max_dop_shift(i); % set the current max. Doppler shift value
     for j = 1:num_samples_per_mds
     
-        % generate the channel pair using the selected values
-        [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = generate_pair( ...
-            SNR, delay_spread * 1e-9, curr_mds, ...
+        % generate the channel pair using the estimator
+        [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = estimator.estimate( ...
+            SNR, delay_spread, curr_mds, ...
             delay_profile, sample_rate, N);
         
         H = cat(3, H_ideal, H_ls);

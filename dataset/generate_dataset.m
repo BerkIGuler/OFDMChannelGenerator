@@ -26,6 +26,9 @@ end
 
 report_every_n = 1000; % report progress every n channels
 
+% Create the OFDM channel estimator instance
+estimator = OFDMChannelEstimator();
+
 f = waitbar(0, 'Starting'); % create a waitbar to show the progress
 
 for i = 1:num_channels
@@ -38,9 +41,9 @@ for i = 1:num_channels
     random_idx = randi(length(max_dop_shift), 1); % randomly select a max. Doppler shift value
     curr_doppler_shift = max_dop_shift(random_idx);
 
-    % generate the channel pair using the selected values
-    [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = generate_pair(curr_SNR, ...
-        curr_delay_spread * 1e-9, curr_doppler_shift, ...
+    % generate the channel pair using the estimator
+    [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = estimator.estimate(curr_SNR, ...
+        curr_delay_spread, curr_doppler_shift, ...
         delay_profile, sample_rate, N);
     
     H = cat(3, H_ideal, H_ls);
