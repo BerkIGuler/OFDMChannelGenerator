@@ -377,9 +377,12 @@ classdef OFDMChannelEstimator < handle
                 var_hat = 10^(-SNR/10);  % Fallback estimate
             end
             
-            % Perfect channel estimate
+            % Perfect channel estimate (use same sample rate as channel/OFDM so path
+            % gains map correctly to OFDM symbols; ensure nonnegative timing offset)
             pathFilters = getPathFilters(channel);
-            H_ideal = nrPerfectChannelEstimate(obj.carrier, path_gains, pathFilters, obj.timing_offset);
+            toffset = max(0, obj.timing_offset);
+            H_ideal = nrPerfectChannelEstimate(obj.carrier, path_gains, pathFilters, toffset, ...
+                'SampleRate', obj.sample_rate);
             
             % LS channel estimate
             H_ls = obj.computeLSEstimate(rx_grid, tx_grid);
