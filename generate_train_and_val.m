@@ -30,7 +30,7 @@ if ~exist(train_folder_name, 'dir')
    mkdir(train_folder_name)
 end
 
-report_every_n = val_num_channels / 10; % report progress every n channels
+report_every_n = val_num_channels / 5; % report progress every n channels
 
 % Create the OFDM channel estimator instance with configuration
 estimator = OFDMChannelEstimator(sample_rate, delay_profile, N);
@@ -48,10 +48,10 @@ for i = 1:total_num_channels
     curr_doppler_shift = max_dop_shift(random_idx);
 
     % generate the channel pair using the estimator
-    [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = estimator.estimate(curr_SNR, ...
+    [H_ideal, Hp_LS, noise_var] = estimator.estimate(curr_SNR, ...
         curr_delay_spread, curr_doppler_shift);
     
-    H = cat(3, H_ideal, H_ls);
+    H = cat(3, H_ideal, Hp_LS);
     
     file_name = strcat(int2str(i), "_", ...
         "SNR-", int2str(curr_SNR), "_", ...
@@ -66,7 +66,7 @@ for i = 1:total_num_channels
         save_path = fullfile(val_folder_name, file_name);
     end
 
-    save(save_path, "H", "var_hat") % save the channel pair and the estimated noise variance
+    save(save_path, "H", "noise_var")
 
     if mod(i, report_every_n) == 0
         waitbar(i / total_num_channels, f, sprintf('Progress: %d %%', ... % update the waitbar

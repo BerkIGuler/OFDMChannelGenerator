@@ -36,10 +36,10 @@ for i = 1:length(max_dop_shift)
     for j = 1:num_samples_per_mds
     
         % generate the channel pair using the estimator
-        [H_ideal, H_ls, H_ls_interp, tx_grid, var_hat] = estimator.estimate( ...
+        [H_ideal, Hp_LS, noise_var] = estimator.estimate( ...
             SNR, delay_spread, curr_mds);
         
-        H = cat(3, H_ideal, H_ls);
+        H = cat(3, H_ideal, Hp_LS);
         
         file_name = strcat(int2str(j), "_", ...
             "SNR-", int2str(SNR), "_", ...
@@ -48,7 +48,7 @@ for i = 1:length(max_dop_shift)
             "N-", int2str(N), "_", ...
             delay_profile);
         save_path = fullfile(folder_name, file_name);
-        save(save_path, "H", "var_hat") % save the channel pair and the estimated noise variance
+        save(save_path, "H", "noise_var")
         
         if mod(sample_count_so_far, report_every_n_samples) == 0
             waitbar(sample_count_so_far / total_samples, ... % update the waitbar

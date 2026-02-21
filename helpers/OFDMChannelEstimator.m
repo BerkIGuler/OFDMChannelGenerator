@@ -1,40 +1,27 @@
 % Author: Berkay Guler
-% Date: 01.10.2026
+% Date: 02.21.2026
 % OFDM Channel Estimator Class
 
 classdef OFDMChannelEstimator < handle
-    % OFDMChannelEstimator - OFDM channel estimation for 5G NR systems
+    % OFDMChannelEstimator - OFDM channel dataset generator for 5G NR systems
     %
-    %   This class provides comprehensive channel estimation capabilities for
-    %   OFDM-based 5G New Radio (NR) systems. It supports least squares (LS)
-    %   channel estimation with bilinear interpolation, as well as perfect
-    %   channel estimation for benchmarking purposes.
+    %   Generates (H, Hp_LS, noise_var) samples for training and testing
+    %   channel estimation algorithms f_theta such that f_theta(Hp_LS) ≈ H.
     %
-    %   The class implements a complete OFDM transmission chain including:
-    %   - Resource grid generation with configurable pilot patterns
+    %   The class implements a complete OFDM transmission chain:
+    %   - Resource grid generation with configurable pilot pattern
     %   - OFDM modulation and demodulation
     %   - TDL/CDL channel modeling with configurable delay spread and Doppler
-    %   - Timing synchronization using perfect timing from channel model
-    %   - AWGN noise addition
-    %   - Perfect channel estimation computed directly from path gains (preserves
-    %     Gaussian statistics for Rayleigh fading channels)
-    %   - LS channel estimation with bilinear interpolation
-    %
-    %   Properties (Constant):
-    %       SUBCARRIERS_PER_RB - Number of subcarriers per resource block (12)
-    %       QPSK_M             - QPSK modulation order (4)
-    %       DEFAULT_NRB        - Default number of resource blocks (10)
-    %       DEFAULT_SCS        - Default subcarrier spacing in kHz (15)
+    %   - Perfect timing synchronization from path gains
+    %   - AWGN noise with exact noise variance computation
+    %   - Perfect channel H computed directly from path gains
+    %   - Sparse LS channel estimate Hp_LS at pilot positions
     %
     %   Example:
-    %       % Create estimator with configuration (offset computed automatically)
     %       estimator = OFDMChannelEstimator(3.84e6, 'TDL-A', 3);
-    %       
-    %       % Generate channel estimates (only varying parameters)
-    %       [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = ...
-    %           estimator.estimate(20, 100, 10);
+    %       [H, Hp_LS, noise_var] = estimator.estimate(20, 100, 10);
     %
-    %   See also: nrCarrierConfig, nrTDLChannel, bilinear_interp
+    %   See also: nrCarrierConfig, nrTDLChannel
     
     properties (Constant)
         % SUBCARRIERS_PER_RB - Number of subcarriers per resource block
@@ -145,64 +132,63 @@ classdef OFDMChannelEstimator < handle
                 obj.pilot_row_indices(1) - 1);
         end
         
-        function [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = estimate(obj, SNR, delay_spread, max_dopp_shift)
-            % estimate - Perform OFDM channel estimation
-            %
-            %   Generates channel estimates for the given channel conditions.
-            %   This method only takes parameters that vary between calls.
+        function [H, Hp_LS, noise_var] = estimate(obj, SNR, delay_spread, max_dopp_shift)
+            % estimate - Generate one (H, Hp_LS, noise_var) sample
             %
             %   Syntax:
-            %       [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = ...
-            %           obj.estimate(SNR, delay_spread, max_dopp_shift)
+            %       [H, Hp_LS, noise_var] = obj.estimate(SNR, delay_spread, max_dopp_shift)
             %
             %   Input Arguments:
             %       SNR              - Signal-to-noise ratio in dB (scalar)
-            %                          Typical range: -10 to 30 dB
             %       delay_spread     - RMS delay spread in nanoseconds (scalar, > 0)
-            %                          Typical range: 10-1000 ns
             %       max_dopp_shift   - Maximum Doppler shift in Hz (scalar, >= 0)
-            %                          Typical range: 0-1000 Hz
             %
             %   Output Arguments:
-            %       H_ideal      - Perfect channel estimate (complex matrix)
-            %                     Size: [num_subcarriers x num_symbols]
-            %                     Ground truth channel frequency response
-            %       H_ls         - Least squares estimate at pilot positions (complex matrix)
-            %                     Size: [num_subcarriers x num_symbols]
-            %                     Non-zero only at pilot locations
-            %       H_interp_ls  - Interpolated LS estimate over full grid (complex matrix)
-            %                     Size: [num_subcarriers x num_symbols]
-            %                     Full channel estimate using bilinear interpolation
-            %       tx_grid      - Transmit resource grid (complex matrix)
-            %                     Size: [num_subcarriers x num_symbols]
-            %                     Contains QPSK-modulated pilot symbols
-            %       var_hat      - Estimated noise variance (scalar)
-            %                     Estimated from received pilots
+            %       H         - Perfect channel frequency response (complex matrix)
+            %                   Size: [num_subcarriers x num_symbols]
+            %       Hp_LS     - Sparse LS channel estimate (complex matrix)
+            %                   Size: [num_subcarriers x num_symbols]
+            %                   Non-zero only at pilot locations
+            %       noise_var - Noise variance per complex element (scalar)
+            %                   Exact variance of the AWGN added to the grid
             %
             %   Example:
             %       estimator = OFDMChannelEstimator(3.84e6, 'TDL-A', 3);
-            %       [H_ideal, H_ls, H_interp_ls, tx_grid, var_hat] = ...
-            %           estimator.estimate(20, 100, 50);
+            %       [H, Hp_LS, noise_var] = estimator.estimate(20, 100, 50);
             
-            % Convert delay spread from ns to seconds
             delay_spread_sec = delay_spread * 1e-9;
             
-            % Generate pilot symbols and transmit grid
             tx_grid = obj.generatePilotGrid();
             
-            % OFDM modulation and channel simulation
-            [rx_waveform, path_gains, sample_times, channel] = obj.simulateChannel(tx_grid, delay_spread_sec, max_dopp_shift);
+            [rx_waveform, path_gains, sample_times, channel] = ...
+                obj.simulateChannel(tx_grid, delay_spread_sec, max_dopp_shift);
             
-            % Use perfect timing from channel model (path gains) so ideal channel and
-            % sync are aligned; avoids timing-estimate bias that can distort statistics
+            % Perfect timing from path gains (consistent for H and demodulation)
             pathFilters = getPathFilters(channel);
             obj.timing_offset = nrPerfectTimingEstimate(path_gains, pathFilters);
             
-            % Timing synchronization and demodulation
-            rx_grid = obj.synchronizeAndDemodulate(rx_waveform, tx_grid);
+            rx_grid = obj.synchronizeAndDemodulate(rx_waveform);
             
-            % Add noise and perform channel estimation
-            [H_ideal, H_ls, H_interp_ls, var_hat] = obj.performChannelEstimation(rx_grid, tx_grid, SNR, path_gains, sample_times, channel);
+            H = obj.buildChannelFromPathGains(path_gains, pathFilters, sample_times);
+            
+            % Exact noise variance matching what awgn() will add
+            signal_power = mean(abs(rx_grid(:)).^2);
+            noise_var = signal_power / (10^(SNR / 10));
+            rx_grid_noisy = awgn(rx_grid, SNR, 'measured');
+            
+            Hp_LS = obj.computeLSEstimate(rx_grid_noisy, tx_grid);
+        end
+        
+        function indices = getPilotRowIndices(obj)
+            indices = obj.pilot_row_indices;
+        end
+        
+        function indices = getPilotColIndices(obj)
+            indices = obj.pilot_col_indices;
+        end
+        
+        function sz = getGridSize(obj)
+            sz = obj.resource_grid_size;
         end
     end
     
@@ -362,14 +348,12 @@ classdef OFDMChannelEstimator < handle
             end
         end
         
-        function rx_grid = synchronizeAndDemodulate(obj, rx_waveform, tx_grid)
-            % synchronizeAndDemodulate - Timing synchronization and OFDM demodulation
+        function rx_grid = synchronizeAndDemodulate(obj, rx_waveform)
+            % synchronizeAndDemodulate - Apply timing sync and OFDM demodulation
+            %   Uses the timing_offset already set on the object (from
+            %   nrPerfectTimingEstimate in estimate()).
             
-            % Estimate and apply timing offset
-            obj.timing_offset = nrTimingEstimate(obj.carrier, rx_waveform, tx_grid);
             rx_waveform = obj.applySynchronization(rx_waveform);
-            
-            % OFDM demodulation
             rx_grid = nrOFDMDemodulate(obj.carrier, rx_waveform);
         end
         
@@ -383,42 +367,15 @@ classdef OFDMChannelEstimator < handle
             end
         end
         
-        function [H_ideal, H_ls, H_interp_ls, var_hat] = performChannelEstimation(obj, rx_grid, tx_grid, SNR, path_gains, sample_times, channel)
-            % performChannelEstimation - Add noise and perform channel estimation
+        function Hp_LS = computeLSEstimate(obj, rx_grid, tx_grid)
+            % computeLSEstimate - Compute LS channel estimate at pilot positions
             
-            % Add AWGN noise
-            rx_grid = awgn(rx_grid, SNR, 'measured');
+            Hp_LS = zeros(obj.resource_grid_size);
             
-            % Estimate noise variance
-            [~, var_hat, ~] = nrChannelEstimate(obj.carrier, rx_grid, tx_grid);
-            if var_hat <= 0 || ~isfinite(var_hat)
-                var_hat = 10^(-SNR/10);  % Fallback estimate
-            end
-            
-            % Perfect channel estimate: build frequency-domain channel directly from
-            % path gains and path filters (bypasses nrPerfectChannelEstimate which
-            % was causing non-Gaussian statistics)
-            pathFilters = getPathFilters(channel);
-            H_ideal = obj.buildChannelFromPathGains(path_gains, pathFilters, sample_times);
-            
-            % LS channel estimate
-            H_ls = obj.computeLSEstimate(rx_grid, tx_grid);
-            
-            % Interpolated LS estimate
-            H_interp_ls = bilinear_interp(H_ls);
-        end
-        
-        function H_ls = computeLSEstimate(obj, rx_grid, tx_grid)
-            % computeLSEstimate - Compute least squares channel estimate at pilot positions
-            
-            H_ls = zeros(obj.resource_grid_size);
-            
-            % Extract pilot symbols
             rx_pilots = rx_grid(obj.pilot_row_indices, obj.pilot_col_indices);
             tx_pilots = tx_grid(obj.pilot_row_indices, obj.pilot_col_indices);
             
-            % Perform LS estimation
-            H_ls(obj.pilot_row_indices, obj.pilot_col_indices) = rx_pilots ./ tx_pilots;
+            Hp_LS(obj.pilot_row_indices, obj.pilot_col_indices) = rx_pilots ./ tx_pilots;
         end
         
         function H = buildChannelFromPathGains(obj, path_gains, pathFilters, sample_times)

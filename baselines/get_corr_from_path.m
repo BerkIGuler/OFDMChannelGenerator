@@ -1,19 +1,25 @@
 function [R_hhp, R_hphp, noise_var] = get_corr_from_path(path)
-    % path: path to .mat file where channel data is stored
-
-    % noise_var: noise variance
-    % R_hhp: cross corr. between gt channel and ls channel at pilot positions
-    % R_hphp: auto corr of ls channel at pilot positions
+    % Compute correlation matrices and noise variance from a saved sample.
+    %
+    %   Input:
+    %       path - Path to .mat file containing H (num_sc x num_sym x 2)
+    %              and noise_var (scalar)
+    %
+    %   Output:
+    %       R_hhp     - Cross-correlation h * hp' (K x Np)
+    %       R_hphp    - Auto-correlation hp * hp' (Np x Np)
+    %       noise_var - Noise variance per complex element
 
     data = load(path);
     channels = data.H;
-    h_ideal = channels(:, :, 1);
-    h_ideal = h_ideal(:);  % vectorize to compute outer product
-                           % we can either vectorize across freq. or time
-                           % here we do across freq
-    hp_ls = channels(:, :, 2);
-    hp_ls = hp_ls(hp_ls ~= 0 + 0i);
-    R_hhp = h_ideal * hp_ls';
-    R_hphp = hp_ls * hp_ls';
-    noise_var = data.var_hat;
+
+    h = channels(:, :, 1);
+    h = h(:);
+
+    hp = channels(:, :, 2);
+    hp = hp(hp ~= 0);
+
+    R_hhp = h * hp';
+    R_hphp = hp * hp';
+    noise_var = data.noise_var;
 end

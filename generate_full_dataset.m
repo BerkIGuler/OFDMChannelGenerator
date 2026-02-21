@@ -80,12 +80,12 @@ for i = 1:train_size
     curr_delay_spread = delay_spread_range(randi(length(delay_spread_range)));
     curr_doppler_shift = max_dop_shift_range(randi(length(max_dop_shift_range)));
     
-    [H_ideal, H_ls, ~, ~, var_hat] = estimator.estimate(curr_SNR, curr_delay_spread, curr_doppler_shift);
-    H = cat(3, H_ideal, H_ls);
+    [H_ideal, Hp_LS, noise_var] = estimator.estimate(curr_SNR, curr_delay_spread, curr_doppler_shift);
+    H = cat(3, H_ideal, Hp_LS);
     
     file_name = sprintf('%d_SNR-%d_DS-%d_DOP-%d_N-%d_%s', ...
         i, curr_SNR, curr_delay_spread, curr_doppler_shift, N, delay_profile);
-    save(fullfile('train', file_name), 'H', 'var_hat');
+    save(fullfile('train', file_name), 'H', 'noise_var');
     
     if mod(i, 1000) == 0
         waitbar(i / train_size, f, sprintf('Training: %d/%d (%.0f%%)', i, train_size, 100*i/train_size));
@@ -104,12 +104,12 @@ for i = 1:val_size
     curr_delay_spread = delay_spread_range(randi(length(delay_spread_range)));
     curr_doppler_shift = max_dop_shift_range(randi(length(max_dop_shift_range)));
     
-    [H_ideal, H_ls, ~, ~, var_hat] = estimator.estimate(curr_SNR, curr_delay_spread, curr_doppler_shift);
-    H = cat(3, H_ideal, H_ls);
+    [H_ideal, Hp_LS, noise_var] = estimator.estimate(curr_SNR, curr_delay_spread, curr_doppler_shift);
+    H = cat(3, H_ideal, Hp_LS);
     
     file_name = sprintf('%d_SNR-%d_DS-%d_DOP-%d_N-%d_%s', ...
         i, curr_SNR, curr_delay_spread, curr_doppler_shift, N, delay_profile);
-    save(fullfile('val', file_name), 'H', 'var_hat');
+    save(fullfile('val', file_name), 'H', 'noise_var');
     
     if mod(i, 100) == 0
         waitbar(i / val_size, f, sprintf('Validation: %d/%d (%.0f%%)', i, val_size, 100*i/val_size));
@@ -128,12 +128,12 @@ count = 0;
 for i = 1:length(snr_test_values)
     curr_SNR = snr_test_values(i);
     for j = 1:test_samples_per_value
-        [H_ideal, H_ls, ~, ~, var_hat] = estimator.estimate(curr_SNR, snr_test_delay_spread, snr_test_max_doppler);
-        H = cat(3, H_ideal, H_ls);
+        [H_ideal, Hp_LS, noise_var] = estimator.estimate(curr_SNR, snr_test_delay_spread, snr_test_max_doppler);
+        H = cat(3, H_ideal, Hp_LS);
         
         file_name = sprintf('%d_SNR-%d_DS-%d_DOP-%d_N-%d_%s', ...
             j, curr_SNR, snr_test_delay_spread, snr_test_max_doppler, N, delay_profile);
-        save(fullfile('test/SNR_test_set', file_name), 'H', 'var_hat');
+        save(fullfile('test/SNR_test_set', file_name), 'H', 'noise_var');
         
         count = count + 1;
         if mod(count, 100) == 0
@@ -154,12 +154,12 @@ count = 0;
 for i = 1:length(ds_test_values)
     curr_ds = ds_test_values(i);
     for j = 1:test_samples_per_value
-        [H_ideal, H_ls, ~, ~, var_hat] = estimator.estimate(ds_test_snr, curr_ds, ds_test_max_doppler);
-        H = cat(3, H_ideal, H_ls);
+        [H_ideal, Hp_LS, noise_var] = estimator.estimate(ds_test_snr, curr_ds, ds_test_max_doppler);
+        H = cat(3, H_ideal, Hp_LS);
         
         file_name = sprintf('%d_SNR-%d_DS-%d_DOP-%d_N-%d_%s', ...
             j, ds_test_snr, curr_ds, ds_test_max_doppler, N, delay_profile);
-        save(fullfile('test/DS_test_set', file_name), 'H', 'var_hat');
+        save(fullfile('test/DS_test_set', file_name), 'H', 'noise_var');
         
         count = count + 1;
         if mod(count, 100) == 0
@@ -180,12 +180,12 @@ count = 0;
 for i = 1:length(mds_test_values)
     curr_mds = mds_test_values(i);
     for j = 1:test_samples_per_value
-        [H_ideal, H_ls, ~, ~, var_hat] = estimator.estimate(mds_test_snr, mds_test_delay_spread, curr_mds);
-        H = cat(3, H_ideal, H_ls);
+        [H_ideal, Hp_LS, noise_var] = estimator.estimate(mds_test_snr, mds_test_delay_spread, curr_mds);
+        H = cat(3, H_ideal, Hp_LS);
         
         file_name = sprintf('%d_SNR-%d_DS-%d_DOP-%d_N-%d_%s', ...
             j, mds_test_snr, mds_test_delay_spread, curr_mds, N, delay_profile);
-        save(fullfile('test/MDS_test_set', file_name), 'H', 'var_hat');
+        save(fullfile('test/MDS_test_set', file_name), 'H', 'noise_var');
         
         count = count + 1;
         if mod(count, 100) == 0

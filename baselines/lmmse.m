@@ -1,18 +1,26 @@
-function [h_lmmse] = lmmse(R_hphp, R_hhp, noise_var, hp_ls)
-    % Based on the formula in:
-        % F. Liu, J. Zhang, P. Jiang, C. -K. Wen and S. Jin, 
-        % "CE-ViT: A Robust Channel Estimator Based on Vision Transformer 
-        % for OFDM Systems," GLOBECOM 2023 - 2023 IEEE Global Communications
-        % Conference, Kuala Lumpur, Malaysia, 2023, pp. 4798-4803
-    
-    diagonal_variance = eye(size(R_hphp, 1)) * noise_var;
-    % take only nonzero elements
-    hp_ls = hp_ls(hp_ls ~= 0 + 0i);
-    
-    % h_lmmse = R_hhp * inv(R_hphp + diagonal_variance) * hp_ls;
-    % / is a more efficient way to take inverse
-    inv_hp_ls = (R_hphp + diagonal_variance) \ hp_ls;
-    h_lmmse = R_hhp * inv_hp_ls;
-    h_lmmse = reshape(h_lmmse, 120, 14);
+function H_hat = lmmse(R_hphp, R_hhp, noise_var, Hp_LS, grid_size)
+    % LMMSE channel estimation baseline.
+    %
+    %   H_hat = R_hhp * (R_hphp + sigma^2 I)^{-1} * hp_ls
+    %
+    %   Reference:
+    %       F. Liu, J. Zhang, P. Jiang, C.-K. Wen and S. Jin,
+    %       "CE-ViT: A Robust Channel Estimator Based on Vision Transformer
+    %       for OFDM Systems," GLOBECOM 2023, pp. 4798-4803
+    %
+    %   Input:
+    %       R_hphp    - Auto-correlation of LS pilots (Np x Np)
+    %       R_hhp     - Cross-correlation of full channel with LS pilots (K x Np)
+    %       noise_var - Noise variance per complex element (scalar)
+    %       Hp_LS     - Sparse LS channel estimate (num_subcarriers x num_symbols)
+    %       grid_size - [num_subcarriers, num_symbols] for reshaping output
+    %
+    %   Output:
+    %       H_hat     - LMMSE channel estimate (num_subcarriers x num_symbols)
+
+    hp_ls = Hp_LS(Hp_LS ~= 0);
+
+    H_hat = R_hhp * ((R_hphp + noise_var * eye(size(R_hphp, 1))) \ hp_ls);
+    H_hat = reshape(H_hat, grid_size(1), grid_size(2));
 end
 

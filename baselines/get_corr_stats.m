@@ -1,26 +1,30 @@
-function [sm_R_hphp, sm_R_hhp, sm_var] = get_corr_stats(path_to_folder)
-    %% Calculates correlation and noise variance statistics of given folder
-    % path_to_folder: folder containing channel data in .mat files
-        
-    % mean_R_hphp: mean of R_hphp matrix for given folder
-    % mean_R_hhp: mean of R_hhp matrix for given folder
-    % mean_var: value of noise variance for given folder
+function [mean_R_hphp, mean_R_hhp, mean_var] = get_corr_stats(path_to_folder)
+    % Estimate E[R_hphp], E[R_hhp], E[noise_var] via sample mean over a folder.
+    %
+    %   Input:
+    %       path_to_folder - Folder containing .mat channel samples
+    %
+    %   Output:
+    %       mean_R_hphp - Sample mean of auto-correlation R_hphp (Np x Np)
+    %       mean_R_hhp  - Sample mean of cross-correlation R_hhp  (K x Np)
+    %       mean_var    - Sample mean of noise variance (scalar)
 
-    files = dir(fullfile(path_to_folder, '*'));
-    files = files(~[files.isdir]);  % Keep only files
-    % sample mean as the estimate of expectation
-    % sm: sample mean
-    sm_var = 0;  
-    sm_R_hphp = zeros(80, 80);
-    sm_R_hhp = zeros(1680, 80);
+    files = dir(fullfile(path_to_folder, '*.mat'));
 
-    % Loop through each file and read it
-    for j = 0:(length(files)-1)
-        file_path = fullfile(path_to_folder, files(j+1).name);
-        
+    % Initialize from first sample to avoid hardcoded dimensions
+    [R_hhp, R_hphp, noise_var] = get_corr_from_path(fullfile(path_to_folder, files(1).name));
+    mean_R_hphp = R_hphp;
+    mean_R_hhp = R_hhp;
+    mean_var = noise_var;
+
+    % Running sample mean for remaining files
+    for j = 2:length(files)
+        file_path = fullfile(path_to_folder, files(j).name);
         [R_hhp, R_hphp, noise_var] = get_corr_from_path(file_path);
-        sm_var = (j / (j + 1)) * sm_var + (noise_var / (j + 1));
-        sm_R_hphp = (j / (j + 1)) * sm_R_hphp + (R_hphp / (j + 1));
-        sm_R_hhp = (j / (j + 1)) * sm_R_hhp + (R_hhp / (j + 1)); 
+
+        w = 1 / j;
+        mean_R_hphp = mean_R_hphp * (1 - w) + R_hphp * w;
+        mean_R_hhp  = mean_R_hhp  * (1 - w) + R_hhp  * w;
+        mean_var    = mean_var    * (1 - w) + noise_var * w;
     end
 end
